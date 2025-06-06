@@ -4,19 +4,35 @@ FastAPI application for ChipEngine.
 Main application entry point with all routes and middleware.
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import uvicorn
 
 from .routes.games import router as games_router
+from .routes.bots import router as bots_router
+from .routes.bot_games import router as bot_games_router
 from .models import HealthResponse
+from .database import get_db, Bot, Game
 from .. import __version__
+from sqlalchemy.orm import Session
 
 # Create FastAPI app
 app = FastAPI(
-    title="ChipEngine API",
-    description="Fast, lean chip engine for bot competitions",
+    title="ChipEngine Bot API",
+    description="""
+    Fast, lean chip engine for bot competitions
+    
+    ## Authentication
+    Most endpoints require API key authentication using Bearer tokens.
+    
+    ## Rate Limits
+    - General API: 1000 requests/minute per bot
+    - Game creation: 10 games/minute per bot
+    
+    ## Supported Games
+    - **RPS**: Rock Paper Scissors
+    """,
     version=__version__,
     docs_url="/docs",
     redoc_url="/redoc"
@@ -32,26 +48,38 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(games_router)
+app.include_router(games_router)  # Human-playable games
+app.include_router(bots_router)   # Bot registration
+app.include_router(bot_games_router)  # Bot game API
 
 
 @app.get("/", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint."""
+async def health_check(db: Session = Depends(get_db)):
+    """Health check endpoint with statistics."""
+    bots_count = db.query(Bot).filter(Bot.is_active == True).count()
+    active_games = db.query(Game).filter(Game.status == "active").count()
+    
     return HealthResponse(
         status="healthy",
         version=__version__,
-        timestamp=datetime.utcnow().isoformat()
+        timestamp=datetime.utcnow().isoformat(),
+        bots_count=bots_count,
+        active_games=active_games
     )
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health():
-    """Health check endpoint."""
+async def health(db: Session = Depends(get_db)):
+    """Health check endpoint with statistics."""
+    bots_count = db.query(Bot).filter(Bot.is_active == True).count()
+    active_games = db.query(Game).filter(Game.status == "active").count()
+    
     return HealthResponse(
         status="healthy",
         version=__version__,
-        timestamp=datetime.utcnow().isoformat()
+        timestamp=datetime.utcnow().isoformat(),
+        bots_count=bots_count,
+        active_games=active_games
     )
 
 
