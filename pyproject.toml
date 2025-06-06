@@ -45,7 +45,6 @@ dev = [
 ]
 poker = [
     # Will add PokerHandEvaluator when implementing poker
-    "poker-hand-evaluator>=1.0.0",
 ]
 production = [
     "psycopg2-binary>=2.9.0",
