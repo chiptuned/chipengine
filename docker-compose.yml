@@ -1,0 +1,58 @@
+services:
+  # Backend API service
+  api:
+    build: .
+    container_name: chipengine-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///app/data/chipengine.db
+      - ENVIRONMENT=development
+      - LOG_LEVEL=info
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src:ro  # Read-only mount for development
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Frontend service (future - when we have frontend build)
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: chipengine-frontend
+  #   ports:
+  #     - "3000:80"
+  #   depends_on:
+  #     - api
+  #   restart: unless-stopped
+
+  # Database management (optional - for PostgreSQL in production)
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: chipengine-db
+  #   environment:
+  #     - POSTGRES_USER=chipengine
+  #     - POSTGRES_PASSWORD=chipengine
+  #     - POSTGRES_DB=chipengine
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   restart: unless-stopped
+
+  # Redis for rate limiting (optional)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: chipengine-redis
+  #   ports:
+  #     - "6379:6379"
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
