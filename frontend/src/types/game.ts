@@ -93,3 +93,49 @@ export interface StressTestMetrics {
   }
   errors: string[]
 }
+
+// Tournament types
+export interface Tournament {
+  tournament_id: string
+  name: string
+  game_type: string
+  status: 'pending' | 'active' | 'completed'
+  format: 'single_elimination' | 'double_elimination' | 'round_robin'
+  participants: string[]
+  max_participants: number
+  created_at: string
+  started_at?: string
+  completed_at?: string
+  current_round: number
+  total_rounds: number
+}
+
+export interface TournamentMatch {
+  match_id: string
+  tournament_id: string
+  round: number
+  position: number
+  player1: string | null
+  player2: string | null
+  winner: string | null
+  game_id?: string
+  status: 'pending' | 'active' | 'completed'
+  score?: {
+    player1: number
+    player2: number
+  }
+}
+
+export interface TournamentBracket {
+  tournament: Tournament
+  matches: TournamentMatch[]
+  standings?: TournamentStanding[]
+}
+
+export interface TournamentStanding {
+  player: string
+  position: number
+  wins: number
+  losses: number
+  points?: number
+}

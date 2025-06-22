@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { apiClient } from '../../lib/api'
@@ -12,10 +12,39 @@ const choices = [
 ]
 
 const RockPaperScissors: React.FC = () => {
+  const [searchParams] = useSearchParams()
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [gameResult, setGameResult] = useState<GameResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [playerName, setPlayerName] = useState('Player')
+  const [tournamentMode, setTournamentMode] = useState(false)
+  
+  // Check if launched from tournament
+  useEffect(() => {
+    const gameId = searchParams.get('gameId')
+    const tournamentId = searchParams.get('tournamentId')
+    
+    if (gameId) {
+      setTournamentMode(true)
+      // Load existing game state
+      loadGameState(gameId)
+    }
+  }, [searchParams])
+  
+  const loadGameState = async (gameId: string) => {
+    setLoading(true)
+    try {
+      const state = await apiClient.getGameState(gameId)
+      setGameState(state)
+      if (state.players.length > 0) {
+        setPlayerName(state.players[0])
+      }
+    } catch (error) {
+      toast.error(`Failed to load game: ${error}`)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const createNewGame = async () => {
     setLoading(true)
@@ -109,11 +138,13 @@ const RockPaperScissors: React.FC = () => {
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2">
             <span className="gradient-text">✂️ Rock Paper Scissors</span>
           </h1>
-          <p className="text-gray-600 text-sm sm:text-base">Test your strategy against our bot!</p>
+          <p className="text-gray-600 text-sm sm:text-base">
+            {tournamentMode ? '🏆 Tournament Match' : 'Test your strategy against our bot!'}
+          </p>
         </div>
 
         {/* Player Name Input */}
-        {!gameState && (
+        {!gameState && !tournamentMode && (
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -239,17 +270,22 @@ const RockPaperScissors: React.FC = () => {
 
               {/* Actions */}
               <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
-                <button 
-                  onClick={createNewGame}
-                  disabled={loading}
-                  className="btn-primary text-sm sm:text-base"
-                >
-                  {loading ? 'Loading...' : '🎮 New Game'}
-                </button>
+                {!tournamentMode && (
+                  <button 
+                    onClick={createNewGame}
+                    disabled={loading}
+                    className="btn-primary text-sm sm:text-base"
+                  >
+                    {loading ? 'Loading...' : '🎮 New Game'}
+                  </button>
+                )}
                 
                 {gameState.game_over && (
-                  <Link to="/games" className="btn-secondary text-sm sm:text-base">
-                    ← Back to Games
+                  <Link 
+                    to={tournamentMode ? `/tournaments/${searchParams.get('tournamentId')}` : "/games"} 
+                    className="btn-secondary text-sm sm:text-base"
+                  >
+                    {tournamentMode ? '← Back to Tournament' : '← Back to Games'}
                   </Link>
                 )}
               </div>

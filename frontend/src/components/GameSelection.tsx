@@ -13,6 +13,14 @@ const GameSelection: React.FC = () => {
       status: 'available'
     },
     {
+      id: 'tournaments',
+      name: 'Tournaments',
+      description: 'Compete in organized bracket tournaments',
+      emoji: '🏆',
+      path: '/tournaments',
+      status: 'available'
+    },
+    {
       id: 'stress-test',
       name: 'Stress Test',
       description: 'Test engine performance under high load',

@@ -129,8 +129,8 @@ const LandingPage: React.FC = () => {
             <Link to="/rps" className="btn-primary text-lg px-8 py-4">
               🎮 Try Demo Game
             </Link>
-            <Link to="/stress-test" className="btn-secondary text-lg px-8 py-4">
-              ⚡ Run Stress Test
+            <Link to="/tournaments" className="btn-secondary text-lg px-8 py-4">
+              🏆 View Tournaments
             </Link>
           </motion.div>
 
@@ -264,6 +264,9 @@ const LandingPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/rps" className="btn-primary text-lg px-8 py-4">
                 🎮 Play Rock Paper Scissors
+              </Link>
+              <Link to="/tournaments" className="btn-secondary text-lg px-8 py-4">
+                🏆 Join Tournaments
               </Link>
               <Link to="/stress-test" className="btn-secondary text-lg px-8 py-4">
                 ⚡ Run Performance Test

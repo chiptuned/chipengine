@@ -4,6 +4,8 @@ import RockPaperScissors from './games/rps/RockPaperScissors'
 import GameSelection from './components/GameSelection'
 import StressTest from './components/StressTest'
 import LandingPage from './components/LandingPage'
+import TournamentList from './components/TournamentList'
+import TournamentBracket from './components/TournamentBracket'
 
 function App() {
   return (
@@ -13,6 +15,8 @@ function App() {
         <Route path="/games" element={<GameSelection />} />
         <Route path="/rps" element={<RockPaperScissors />} />
         <Route path="/stress-test" element={<StressTest />} />
+        <Route path="/tournaments" element={<TournamentList />} />
+        <Route path="/tournaments/:tournamentId" element={<TournamentBracket />} />
       </Routes>
       <Toaster 
         position="top-right"
