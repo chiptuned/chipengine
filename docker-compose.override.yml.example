@@ -1,0 +1,38 @@
+# Docker Compose Override Example
+# Copy this file to docker-compose.override.yml to customize your local development setup
+# This file is automatically loaded by docker-compose and overrides settings in docker-compose.yml
+
+version: '3.8'
+
+services:
+  # Example: Use SQLite instead of PostgreSQL for development
+  # api:
+  #   environment:
+  #     - DATABASE_URL=sqlite:///app/data/chipengine.db
+  #   volumes:
+  #     - ./data:/app/data
+  #   depends_on: []  # Remove PostgreSQL dependency
+
+  # Example: Disable PostgreSQL if using SQLite
+  # db:
+  #   profiles:
+  #     - postgres  # This effectively disables the service unless explicitly requested
+
+  # Example: Enable Redis for distributed rate limiting
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: chipengine-redis
+  #   ports:
+  #     - "${REDIS_PORT:-6379}:6379"
+  #   restart: unless-stopped
+  #   networks:
+  #     - chipengine-network
+
+  # Example: Mount source code for live reloading during development
+  # api:
+  #   volumes:
+  #     - ./src:/app/src
+  #     - ./tests:/app/tests
+  #   environment:
+  #     - ENVIRONMENT=development
+  #     - LOG_LEVEL=debug

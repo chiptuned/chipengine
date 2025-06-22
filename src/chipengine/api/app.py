@@ -4,18 +4,24 @@ FastAPI application for ChipEngine.
 Main application entry point with all routes and middleware.
 """
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import uvicorn
+import uuid
+from sqlalchemy.orm import Session
 
 from .routes.games import router as games_router
+from .routes.stress_tests import router as stress_tests_router
 from .routes.bots import router as bots_router
 from .routes.bot_games import router as bot_games_router
+from .routes.stats import router as stats_router
+from .routes.tournaments import router as tournaments_router
 from .models import HealthResponse
 from .database import get_db, Bot, Game
 from .. import __version__
-from sqlalchemy.orm import Session
+from ..database import init_db
+from .websockets import manager, handle_client_message
 
 # Create FastAPI app
 app = FastAPI(
@@ -51,6 +57,15 @@ app.add_middleware(
 app.include_router(games_router)  # Human-playable games
 app.include_router(bots_router)   # Bot registration
 app.include_router(bot_games_router)  # Bot game API
+app.include_router(stress_tests_router)  # Stress testing
+app.include_router(stats_router)  # Statistics
+app.include_router(tournaments_router)  # Tournaments
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on startup."""
+    init_db()
 
 
 @app.get("/", response_model=HealthResponse)
@@ -81,6 +96,42 @@ async def health(db: Session = Depends(get_db)):
         bots_count=bots_count,
         active_games=active_games
     )
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time game updates."""
+    client_id = str(uuid.uuid4())
+    await manager.connect(websocket, client_id)
+    
+    try:
+        await websocket.send_json({
+            "type": "connected",
+            "client_id": client_id,
+            "message": "Connected to ChipEngine WebSocket"
+        })
+        
+        while True:
+            data = await websocket.receive_json()
+            await handle_client_message(client_id, data)
+            
+    except WebSocketDisconnect:
+        manager.disconnect(client_id)
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        manager.disconnect(client_id)
+
+
+@app.get("/ws/stats")
+async def websocket_stats():
+    """Get WebSocket connection statistics."""
+    return {
+        "total_connections": len(manager.active_connections),
+        "game_subscriptions": {
+            game_id: len(clients) 
+            for game_id, clients in manager.game_subscriptions.items()
+        }
+    }
 
 
 if __name__ == "__main__":

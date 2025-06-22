@@ -125,6 +125,9 @@ async def delete_game(game_id: str):
     if game_id in game_manager.active_games:
         del game_manager.active_games[game_id]
     
+    if game_id in game_manager.move_counter:
+        del game_manager.move_counter[game_id]
+    
     return {"message": "Game deleted successfully"}
 
 

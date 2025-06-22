@@ -3,8 +3,8 @@ Test Rock Paper Scissors game implementation.
 """
 
 import pytest
-from src.chipengine.games.rps import RockPaperScissorsGame
-from src.chipengine.core.base_game import Move
+from chipengine.games.rps import RockPaperScissorsGame
+from chipengine.core.base_game import Move
 
 
 class TestRPSGame:

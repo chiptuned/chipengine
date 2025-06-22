@@ -169,6 +169,17 @@ simulation_results/
 benchmark_results/
 profiling_data/
 
+# ChipEngine specific
+chipengine.db
+data/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+load_test_results.jsonl
+quick_bot_test.py
+start_bot_api.py
+
 # Performance data
 *.prof
 *.pstats

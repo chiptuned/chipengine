@@ -1,0 +1,37 @@
+# Render deployment configuration
+services:
+  # API Service
+  - type: web
+    name: chipengine-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: chipengine-db
+          property: connectionString
+      - key: PORT
+        value: 8000
+    healthCheckPath: /health
+    
+  # Database Service (optional - for PostgreSQL)
+  # - type: pserv
+  #   name: chipengine-db
+  #   runtime: docker
+  #   dockerContext: .
+  #   dockerfilePath: ./Dockerfile.postgres
+  #   envVars:
+  #     - key: POSTGRES_DB
+  #       value: chipengine
+  #     - key: POSTGRES_USER
+  #       value: chipengine
+  #     - key: POSTGRES_PASSWORD
+  #       generateValue: true
+
+databases:
+  - name: chipengine-db
+    databaseName: chipengine
+    user: chipengine
+    plan: starter
