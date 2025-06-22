@@ -100,3 +100,57 @@ class StressTestMetrics(BaseModel):
     counters: Dict[str, int]
     timing: Dict[str, float]
     errors: List[str]
+
+
+# Bot API Models
+class RegisterBotRequest(BaseModel):
+    """Request to register a new bot."""
+    name: str
+
+
+class RegisterBotResponse(BaseModel):
+    """Response when registering a bot."""
+    bot_id: str
+    name: str
+    api_key: str
+    created_at: str
+
+
+class BotInfoResponse(BaseModel):
+    """Bot information response."""
+    bot_id: str
+    name: str
+    created_at: str
+    games_created: int
+    last_request_time: Optional[str]
+    rate_limit: int
+
+
+class BotCreateGameRequest(BaseModel):
+    """Request for bot to create a game."""
+    game_type: str
+    opponent_bot_id: Optional[str] = None  # If playing against another bot
+    config: Dict[str, Any] = {}
+
+
+class BotCreateGameResponse(BaseModel):
+    """Response when bot creates a game."""
+    game_id: str
+    game_type: str
+    players: List[str]
+    status: str
+    your_player_id: str
+
+
+class BotMakeMoveRequest(BaseModel):
+    """Request for bot to make a move."""
+    action: str
+    data: Dict[str, Any] = {}
+
+
+class BotGameListResponse(BaseModel):
+    """Response listing bot's games."""
+    games: List[Dict[str, Any]]
+    total_games: int
+    active_games: int
+    completed_games: int
