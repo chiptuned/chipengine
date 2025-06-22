@@ -33,7 +33,7 @@ class GameStateResponse(BaseModel):
     current_player: Optional[str]
     game_over: bool
     winner: Optional[str]
-    valid_moves: List[str]
+    valid_moves: Dict[str, List[str]]
     metadata: Dict[str, Any] = {}
 
 
@@ -58,3 +58,45 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     timestamp: str
+
+
+class StressTestRequest(BaseModel):
+    """Request to start a stress test."""
+    game_type: str = "rps"
+    concurrent_games: int = 100
+    games_per_second: int = 50
+    duration_seconds: int = 60
+    total_games: Optional[int] = None
+
+
+class StressTestResponse(BaseModel):
+    """Response when starting a stress test."""
+    test_id: str
+    status: str
+    config: StressTestRequest
+    started_at: str
+
+
+class StressTestStatus(BaseModel):
+    """Current status of a stress test."""
+    test_id: str
+    status: str
+    started_at: str
+    elapsed_seconds: float
+    games_created: int
+    games_completed: int
+    games_failed: int
+    current_rps: float
+    peak_rps: float
+    avg_game_duration: float
+    errors: List[str]
+    config: StressTestRequest
+
+
+class StressTestMetrics(BaseModel):
+    """Detailed metrics for a stress test."""
+    test_id: str
+    performance: Dict[str, float]
+    counters: Dict[str, int]
+    timing: Dict[str, float]
+    errors: List[str]

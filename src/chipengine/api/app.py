@@ -10,6 +10,7 @@ from datetime import datetime
 import uvicorn
 
 from .routes.games import router as games_router
+from .routes.stress_tests import router as stress_tests_router
 from .models import HealthResponse
 from .. import __version__
 
@@ -33,6 +34,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(games_router)
+app.include_router(stress_tests_router)
 
 
 @app.get("/", response_model=HealthResponse)
