@@ -13,6 +13,14 @@ const GameSelection: React.FC = () => {
       status: 'available'
     },
     {
+      id: 'stress-test',
+      name: 'Stress Test',
+      description: 'Test engine performance under high load',
+      emoji: '⚡',
+      path: '/stress-test',
+      status: 'available'
+    },
+    {
       id: 'poker',
       name: 'Texas Hold\'em',
       description: 'Coming soon - Advanced poker gameplay',
@@ -23,56 +31,56 @@ const GameSelection: React.FC = () => {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-16">
+    <div className="min-h-screen">
+      <div className="container mx-auto px-4 py-8 sm:py-16">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12"
+          className="text-center mb-8 sm:mb-12"
         >
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            🎮 ChipEngine
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-4 floating-animation">
+            <span className="gradient-text">🎮 ChipEngine</span>
           </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
             Fast, lean game engine for bot competitions. 
             Start with Rock Paper Scissors, expand to Poker and beyond.
           </p>
         </motion.div>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto">
           {games.map((game, index) => (
             <motion.div
               key={game.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              className={`card ${game.status === 'available' ? 'hover:shadow-lg cursor-pointer' : 'opacity-60'}`}
+              className={`glass-card ${game.status === 'available' ? 'cursor-pointer glow-effect' : 'opacity-60'}`}
             >
               {game.status === 'available' ? (
                 <Link to={game.path} className="block">
                   <div className="text-center">
-                    <div className="text-6xl mb-4">{game.emoji}</div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                    <div className="text-5xl sm:text-6xl mb-6 floating-animation">{game.emoji}</div>
+                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3">
                       {game.name}
                     </h2>
-                    <p className="text-gray-600 mb-4">
+                    <p className="text-gray-600 mb-6 text-sm sm:text-base">
                       {game.description}
                     </p>
-                    <button className="btn-primary">
+                    <button className="btn-primary text-sm sm:text-base">
                       Play Now
                     </button>
                   </div>
                 </Link>
               ) : (
                 <div className="text-center">
-                  <div className="text-6xl mb-4">{game.emoji}</div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  <div className="text-5xl sm:text-6xl mb-6 opacity-70">{game.emoji}</div>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3">
                     {game.name}
                   </h2>
-                  <p className="text-gray-600 mb-4">
+                  <p className="text-gray-600 mb-6 text-sm sm:text-base">
                     {game.description}
                   </p>
-                  <button className="btn-secondary" disabled>
+                  <button className="btn-secondary text-sm sm:text-base" disabled>
                     Coming Soon
                   </button>
                 </div>

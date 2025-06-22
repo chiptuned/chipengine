@@ -99,17 +99,17 @@ const RockPaperScissors: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen">
+      <div className="container mx-auto px-4 py-6 sm:py-8">
         {/* Header */}
-        <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-4">
+        <div className="text-center mb-6 sm:mb-8">
+          <Link to="/games" className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-4 transition-colors duration-200">
             ← Back to Games
           </Link>
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            ✂️ Rock Paper Scissors
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2">
+            <span className="gradient-text">✂️ Rock Paper Scissors</span>
           </h1>
-          <p className="text-gray-600">Test your strategy against our bot!</p>
+          <p className="text-gray-600 text-sm sm:text-base">Test your strategy against our bot!</p>
         </div>
 
         {/* Player Name Input */}
@@ -117,17 +117,17 @@ const RockPaperScissors: React.FC = () => {
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="max-w-md mx-auto mb-8"
+            className="max-w-md mx-auto mb-6 sm:mb-8"
           >
-            <div className="card">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="glass-card">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
                 Your Name
               </label>
               <input
                 type="text"
                 value={playerName}
                 onChange={(e) => setPlayerName(e.target.value || 'Player')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="input-field"
                 placeholder="Enter your name"
               />
             </div>
@@ -135,35 +135,35 @@ const RockPaperScissors: React.FC = () => {
         )}
 
         {/* Game Area */}
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-3xl mx-auto">
           {!gameState ? (
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               className="text-center"
             >
-              <div className="card">
-                <div className="text-6xl mb-4">🎮</div>
-                <h2 className="text-2xl font-bold mb-4">Ready to Play?</h2>
+              <div className="glass-card glow-effect">
+                <div className="text-5xl sm:text-6xl mb-6 floating-animation">🎮</div>
+                <h2 className="text-xl sm:text-2xl font-bold mb-6">Ready to Play?</h2>
                 <button 
                   onClick={createNewGame}
                   disabled={loading}
-                  className="btn-primary text-lg px-8 py-3"
+                  className="btn-primary text-base sm:text-lg"
                 >
                   {loading ? 'Creating Game...' : 'Start New Game'}
                 </button>
               </div>
             </motion.div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {/* Game Status */}
-              <div className="card text-center">
-                <div className="text-sm text-gray-600 mb-2">Game ID: {gameState.game_id}</div>
-                <div className="text-lg font-semibold">
-                  {gameState.game_over ? 'Game Over!' : 'Make Your Choice'}
+              <div className="glass-card text-center">
+                <div className="text-xs sm:text-sm text-gray-500 mb-2">Game ID: {gameState.game_id}</div>
+                <div className="text-lg sm:text-xl font-semibold">
+                  {gameState.game_over ? '🎉 Game Over!' : '🎯 Make Your Choice'}
                 </div>
                 {gameResult && (
-                  <div className="text-2xl font-bold mt-2 text-blue-600">
+                  <div className="text-xl sm:text-2xl font-bold mt-3 gradient-text">
                     {getWinnerMessage()}
                   </div>
                 )}
@@ -176,36 +176,36 @@ const RockPaperScissors: React.FC = () => {
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    className="card"
+                    className="glass-card"
                   >
-                    <h3 className="text-lg font-semibold mb-4 text-center">Last Round</h3>
-                    <div className="flex justify-center items-center space-x-8">
+                    <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-6 text-center">⚔️ Last Round</h3>
+                    <div className="flex justify-center items-center space-x-4 sm:space-x-8">
                       <div className="text-center">
-                        <div className="text-4xl mb-2">
+                        <div className="text-3xl sm:text-4xl mb-2">
                           {getChoiceEmoji(getLastRound()?.moves[playerName])}
                         </div>
-                        <div className="font-medium">{playerName}</div>
-                        <div className="text-sm text-gray-600">
+                        <div className="font-medium text-sm sm:text-base">{playerName}</div>
+                        <div className="text-xs sm:text-sm text-gray-600 capitalize">
                           {getLastRound()?.moves[playerName]}
                         </div>
                       </div>
                       
-                      <div className="text-2xl">VS</div>
+                      <div className="text-lg sm:text-2xl font-bold text-gray-400">VS</div>
                       
                       <div className="text-center">
-                        <div className="text-4xl mb-2">
+                        <div className="text-3xl sm:text-4xl mb-2">
                           {getChoiceEmoji(getLastRound()?.moves['SimpleBot'])}
                         </div>
-                        <div className="font-medium">SimpleBot</div>
-                        <div className="text-sm text-gray-600">
+                        <div className="font-medium text-sm sm:text-base">SimpleBot</div>
+                        <div className="text-xs sm:text-sm text-gray-600 capitalize">
                           {getLastRound()?.moves['SimpleBot']}
                         </div>
                       </div>
                     </div>
                     
-                    <div className="text-center mt-4 text-lg font-semibold">
-                      {getLastRound()?.winner === null ? 'Tie!' : 
-                       getLastRound()?.winner === playerName ? 'You Win!' : 'Bot Wins!'}
+                    <div className="text-center mt-4 sm:mt-6 text-base sm:text-lg font-bold gradient-text">
+                      {getLastRound()?.winner === null ? '🤝 Tie!' : 
+                       getLastRound()?.winner === playerName ? '🎉 You Win!' : '🤖 Bot Wins!'}
                     </div>
                   </motion.div>
                 )}
@@ -216,10 +216,10 @@ const RockPaperScissors: React.FC = () => {
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="card"
+                  className="glass-card glow-effect"
                 >
-                  <h3 className="text-lg font-semibold mb-4 text-center">Choose Your Move</h3>
-                  <div className="grid grid-cols-3 gap-4">
+                  <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-6 text-center">🎯 Choose Your Move</h3>
+                  <div className="grid grid-cols-3 gap-3 sm:gap-4">
                     {choices.map((choice) => (
                       <motion.button
                         key={choice.value}
@@ -227,10 +227,10 @@ const RockPaperScissors: React.FC = () => {
                         whileTap={{ scale: 0.95 }}
                         onClick={() => makeMove(choice.value)}
                         disabled={loading}
-                        className="game-button flex-col space-y-2 h-24"
+                        className="game-button flex-col space-y-2 h-20 sm:h-24"
                       >
-                        <div className="text-3xl">{choice.emoji}</div>
-                        <div className="text-sm font-medium">{choice.name}</div>
+                        <div className="text-2xl sm:text-3xl">{choice.emoji}</div>
+                        <div className="text-xs sm:text-sm font-medium">{choice.name}</div>
                       </motion.button>
                     ))}
                   </div>
@@ -238,18 +238,18 @@ const RockPaperScissors: React.FC = () => {
               )}
 
               {/* Actions */}
-              <div className="flex justify-center space-x-4">
+              <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
                 <button 
                   onClick={createNewGame}
                   disabled={loading}
-                  className="btn-primary"
+                  className="btn-primary text-sm sm:text-base"
                 >
-                  {loading ? 'Loading...' : 'New Game'}
+                  {loading ? 'Loading...' : '🎮 New Game'}
                 </button>
                 
                 {gameState.game_over && (
-                  <Link to="/" className="btn-secondary">
-                    Back to Games
+                  <Link to="/games" className="btn-secondary text-sm sm:text-base">
+                    ← Back to Games
                   </Link>
                 )}
               </div>
