@@ -154,3 +154,133 @@ class BotGameListResponse(BaseModel):
     total_games: int
     active_games: int
     completed_games: int
+
+
+# Statistics API Models
+class GameSummary(BaseModel):
+    """Summary information for a game."""
+    game_id: str
+    game_type: str
+    status: str
+    created_at: str
+    completed_at: Optional[str]
+    players: List[Dict[str, Any]]
+    winner_id: Optional[str]
+    duration_seconds: Optional[float]
+
+
+class GameDetail(BaseModel):
+    """Detailed game information including moves."""
+    game_id: str
+    game_type: str
+    status: str
+    created_at: str
+    completed_at: Optional[str]
+    config: Dict[str, Any]
+    state: Dict[str, Any]
+    players: List[Dict[str, Any]]
+    moves: List[Dict[str, Any]]
+    winner_id: Optional[str]
+    duration_seconds: Optional[float]
+
+
+class BotStatistics(BaseModel):
+    """Bot performance statistics."""
+    bot_id: str
+    bot_name: str
+    total_games: int
+    wins: int
+    losses: int
+    draws: int
+    win_rate: float
+    avg_game_duration: float
+    games_by_type: Dict[str, int]
+    recent_games: List[GameSummary]
+
+
+class LeaderboardEntry(BaseModel):
+    """Leaderboard entry for a bot."""
+    rank: int
+    bot_id: str
+    bot_name: str
+    games_played: int
+    wins: int
+    win_rate: float
+    points: int
+
+
+class PlatformStatistics(BaseModel):
+    """Platform-wide statistics."""
+    total_games: int
+    active_games: int
+    completed_games: int
+    total_bots: int
+    active_bots: int
+    games_last_24h: int
+    games_last_7d: int
+    popular_game_types: Dict[str, int]
+    peak_concurrent_games: int
+    avg_game_duration: float
+
+
+# Tournament API Models
+class CreateTournamentRequest(BaseModel):
+    """Request to create a new tournament."""
+    name: str
+    game_type: str
+    format: str = "single_elimination"
+    max_participants: Optional[int] = None
+    config: Dict[str, Any] = {}
+
+
+class CreateTournamentResponse(BaseModel):
+    """Response when creating a tournament."""
+    tournament_id: str
+    name: str
+    game_type: str
+    format: str
+    status: str
+    max_participants: Optional[int]
+    created_at: str
+
+
+class JoinTournamentRequest(BaseModel):
+    """Request to join a tournament."""
+    bot_id: str
+
+
+class JoinTournamentResponse(BaseModel):
+    """Response when joining a tournament."""
+    tournament_id: str
+    bot_id: str
+    seed: Optional[int]
+    registered_at: str
+
+
+class TournamentInfo(BaseModel):
+    """Tournament information."""
+    tournament_id: str
+    name: str
+    game_type: str
+    format: str
+    status: str
+    created_at: str
+    start_time: Optional[str]
+    end_time: Optional[str]
+    max_participants: Optional[int]
+    current_participants: int
+    config: Dict[str, Any]
+
+
+class TournamentListResponse(BaseModel):
+    """Response listing tournaments."""
+    tournaments: List[TournamentInfo]
+    total: int
+
+
+class BracketResponse(BaseModel):
+    """Tournament bracket/standings response."""
+    tournament_id: str
+    format: str
+    status: str
+    data: Dict[str, Any]

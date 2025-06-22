@@ -77,6 +77,9 @@ class BotAuthManager:
     
     def register_bot(self, name: str) -> BotInfo:
         """Register a new bot and generate API key."""
+        from ..database.session import DatabaseSession
+        from ..database.models import Bot as BotModel
+        
         bot_id = f"bot_{secrets.token_urlsafe(8)}"
         api_key = f"chp_{secrets.token_urlsafe(32)}"
         
@@ -86,6 +89,21 @@ class BotAuthManager:
             api_key=api_key,
             created_at=datetime.utcnow()
         )
+        
+        # Save to database
+        try:
+            with DatabaseSession() as db:
+                bot_model = BotModel(
+                    id=bot_id,
+                    name=name,
+                    api_key=api_key,
+                    created_at=bot_info.created_at
+                )
+                db.add(bot_model)
+                db.commit()
+        except Exception as e:
+            # Log error but don't fail registration
+            print(f"Failed to save bot to database: {e}")
         
         self.bots[bot_id] = bot_info
         self.api_key_to_bot[api_key] = bot_id
