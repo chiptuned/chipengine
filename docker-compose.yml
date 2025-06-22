@@ -1,24 +1,54 @@
 services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: chipengine-db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-chipengine}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-chipengine}
+      - POSTGRES_DB=${POSTGRES_DB:-chipengine}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chipengine}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - chipengine-network
+
   # Backend API service
   api:
     build: .
     container_name: chipengine-api
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     environment:
-      - DATABASE_URL=sqlite:///app/data/chipengine.db
-      - ENVIRONMENT=development
-      - LOG_LEVEL=info
+      - DATABASE_URL=${DATABASE_URL:-postgresql://chipengine:chipengine@db:5432/chipengine}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
+      - API_KEY_LENGTH=${API_KEY_LENGTH:-32}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     volumes:
-      - ./data:/app/data
       - ./src:/app/src:ro  # Read-only mount for development
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 5s
+      start_period: 20s
+    networks:
+      - chipengine-network
 
   # Frontend service (future - when we have frontend build)
   # frontend:
@@ -31,28 +61,23 @@ services:
   #   depends_on:
   #     - api
   #   restart: unless-stopped
-
-  # Database management (optional - for PostgreSQL in production)
-  # db:
-  #   image: postgres:15-alpine
-  #   container_name: chipengine-db
-  #   environment:
-  #     - POSTGRES_USER=chipengine
-  #     - POSTGRES_PASSWORD=chipengine
-  #     - POSTGRES_DB=chipengine
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   ports:
-  #     - "5432:5432"
-  #   restart: unless-stopped
+  #   networks:
+  #     - chipengine-network
 
   # Redis for rate limiting (optional)
   # redis:
   #   image: redis:7-alpine
   #   container_name: chipengine-redis
   #   ports:
-  #     - "6379:6379"
+  #     - "${REDIS_PORT:-6379}:6379"
   #   restart: unless-stopped
+  #   networks:
+  #     - chipengine-network
 
 volumes:
   postgres_data:
+    driver: local
+
+networks:
+  chipengine-network:
+    driver: bridge
