@@ -11,8 +11,11 @@ import uvicorn
 
 from .routes.games import router as games_router
 from .routes.stress_tests import router as stress_tests_router
+from .routes.bots import router as bots_router
+from .routes.stats import router as stats_router
 from .models import HealthResponse
 from .. import __version__
+from ..database import init_db
 
 # Create FastAPI app
 app = FastAPI(
@@ -35,6 +38,16 @@ app.add_middleware(
 # Include routers
 app.include_router(games_router)
 app.include_router(stress_tests_router)
+app.include_router(bots_router)
+app.include_router(stats_router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on startup."""
+    init_db()
+    print(f"ChipEngine API v{__version__} started")
+    print("Database initialized")
 
 
 @app.get("/", response_model=HealthResponse)
