@@ -7,6 +7,7 @@ Handles game creation, state management, and coordination.
 import uuid
 from typing import Dict, Optional, List
 from datetime import datetime
+import asyncio
 
 from ..core.base_game import BaseGame, Move
 from ..games.rps import RockPaperScissorsGame
@@ -23,6 +24,7 @@ class GameManager:
     - Track active games
     - Process moves
     - Clean up finished games
+    - Broadcast real-time updates via WebSocket
     """
     
     def __init__(self):
@@ -32,6 +34,7 @@ class GameManager:
             "rock_paper_scissors": RockPaperScissorsGame
         }
         self.move_counter: Dict[str, int] = {}  # Track move numbers per game
+        self.websocket_manager = None  # Will be set after import
     
     def create_game(self, game_type: str, players: list, config: dict = None) -> str:
         """Create a new game and return game ID."""
@@ -61,6 +64,9 @@ class GameManager:
         
         # Save to database
         self._save_game_to_database(game_id, game_type, players, config)
+        
+        # Broadcast game creation
+        asyncio.create_task(self._broadcast_game_created(game_id, game))
         
         return game_id
     
@@ -94,6 +100,13 @@ class GameManager:
         
         # Update game state in database
         self._update_game_state(game_id, game)
+        
+        # Broadcast move and state update
+        asyncio.create_task(self._broadcast_move(game_id, player, action, data, game))
+        
+        # Check if game is over
+        if game.is_game_over():
+            asyncio.create_task(self._broadcast_game_over(game_id, game))
         
         return game
     
@@ -266,7 +279,38 @@ class GameManager:
                             player_model.score = score
                 
                 db.commit()
+    
+    async def _broadcast_game_created(self, game_id: str, game: BaseGame) -> None:
+        """Broadcast game creation event."""
+        if self.websocket_manager:
+            state = self.get_game_state(game_id)
+            await self.websocket_manager.broadcast_game_update(game_id, {
+                "type": "game_created",
+                "state": state
+            })
+    
+    async def _broadcast_move(self, game_id: str, player: str, action: str, data: dict, game: BaseGame) -> None:
+        """Broadcast move event."""
+        if self.websocket_manager:
+            state = self.get_game_state(game_id)
+            await self.websocket_manager.broadcast_move(
+                game_id,
+                player,
+                {"action": action, "data": data},
+                {"state": state}
+            )
+    
+    async def _broadcast_game_over(self, game_id: str, game: BaseGame) -> None:
+        """Broadcast game over event."""
+        if self.websocket_manager:
+            state = self.get_game_state(game_id)
+            winner = game.get_winner()
+            await self.websocket_manager.broadcast_game_over(game_id, winner, state)
 
 
 # Global game manager instance
 game_manager = GameManager()
+
+# Import websocket manager after creating game_manager to avoid circular import
+from .websockets import manager as ws_manager
+game_manager.websocket_manager = ws_manager
