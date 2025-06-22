@@ -1,27 +1,15 @@
-"""
-Authentication module for ChipEngine Bot API.
-
-Provides API key authentication and rate limiting for bot endpoints.
-"""
+"""Authentication middleware and utilities for bot API."""
 
 import secrets
 import time
-from typing import Dict, Optional, Set
-from datetime import datetime, timedelta
-from fastapi import HTTPException, Security, status
-from fastapi.security import APIKeyHeader
-from pydantic import BaseModel
+from typing import Dict, Optional
+from datetime import datetime
+from fastapi import HTTPException, Security, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from .database import get_db, Bot
 
-
-class BotInfo(BaseModel):
-    """Information about a registered bot."""
-    bot_id: str
-    name: str
-    api_key: str
-    created_at: datetime
-    rate_limit: int = 100  # requests per minute
-    games_created: int = 0
-    last_request_time: Optional[datetime] = None
+security = HTTPBearer()
 
 
 class RateLimiter:
@@ -52,126 +40,78 @@ class RateLimiter:
         # Add current request
         self.requests[bot_id].append(now)
         return True
-    
-    def get_requests_count(self, bot_id: str) -> int:
-        """Get current requests count for a bot."""
-        now = time.time()
-        
-        if bot_id not in self.requests:
-            return 0
-        
-        # Count requests within window
-        return len([
-            req_time for req_time in self.requests[bot_id]
-            if now - req_time < self.window_seconds
-        ])
 
 
-class BotAuthManager:
-    """Manages bot authentication and authorization."""
-    
-    def __init__(self):
-        self.bots: Dict[str, BotInfo] = {}
-        self.api_key_to_bot: Dict[str, str] = {}
-        self.rate_limiter = RateLimiter()
-    
-    def register_bot(self, name: str) -> BotInfo:
-        """Register a new bot and generate API key."""
-        from ..database.session import DatabaseSession
-        from ..database.models import Bot as BotModel
-        
-        bot_id = f"bot_{secrets.token_urlsafe(8)}"
-        api_key = f"chp_{secrets.token_urlsafe(32)}"
-        
-        bot_info = BotInfo(
-            bot_id=bot_id,
-            name=name,
-            api_key=api_key,
-            created_at=datetime.utcnow()
-        )
-        
-        # Save to database
-        try:
-            with DatabaseSession() as db:
-                bot_model = BotModel(
-                    id=bot_id,
-                    name=name,
-                    api_key=api_key,
-                    created_at=bot_info.created_at
-                )
-                db.add(bot_model)
-                db.commit()
-        except Exception as e:
-            # Log error but don't fail registration
-            print(f"Failed to save bot to database: {e}")
-        
-        self.bots[bot_id] = bot_info
-        self.api_key_to_bot[api_key] = bot_id
-        
-        return bot_info
-    
-    def get_bot_by_api_key(self, api_key: str) -> Optional[BotInfo]:
-        """Get bot info by API key."""
-        bot_id = self.api_key_to_bot.get(api_key)
-        if bot_id:
-            return self.bots.get(bot_id)
-        return None
-    
-    def get_bot_by_id(self, bot_id: str) -> Optional[BotInfo]:
-        """Get bot info by ID."""
-        return self.bots.get(bot_id)
-    
-    def check_rate_limit(self, bot_id: str) -> bool:
-        """Check if bot is within rate limit."""
-        bot = self.bots.get(bot_id)
-        if not bot:
-            return False
-        
-        return self.rate_limiter.check_rate_limit(bot_id)
-    
-    def update_last_request(self, bot_id: str):
-        """Update bot's last request time."""
-        bot = self.bots.get(bot_id)
-        if bot:
-            bot.last_request_time = datetime.utcnow()
-    
-    def increment_games_created(self, bot_id: str):
-        """Increment bot's games created counter."""
-        bot = self.bots.get(bot_id)
-        if bot:
-            bot.games_created += 1
+# Global rate limiter instance
+rate_limiter = RateLimiter()
 
 
-# Global auth manager instance
-bot_auth_manager = BotAuthManager()
+def generate_api_key() -> str:
+    """Generate a secure API key for bot authentication."""
+    # Generate a secure random token
+    token = secrets.token_urlsafe(32)
+    # Add a prefix to identify ChipEngine keys
+    return f"chp_{token}"
 
-# API Key header security
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
-
-async def verify_api_key(api_key: Optional[str] = Security(api_key_header)) -> BotInfo:
-    """Verify API key and return bot info."""
-    if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key required"
-        )
+def get_current_bot(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    db: Session = Depends(get_db)
+) -> Bot:
+    """
+    Validate bot authentication and return current bot.
     
-    bot = bot_auth_manager.get_bot_by_api_key(api_key)
+    This dependency can be used in any endpoint that requires bot authentication.
+    """
+    api_key = credentials.credentials
+    
+    # Query bot by API key
+    bot = db.query(Bot).filter(Bot.api_key == api_key).first()
+    
     if not bot:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key"
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not bot.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bot account is deactivated"
         )
     
     # Check rate limit
-    if not bot_auth_manager.check_rate_limit(bot.bot_id):
+    if not rate_limiter.check_rate_limit(bot.id):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Rate limit exceeded. Max 100 requests per minute."
+            detail="Rate limit exceeded. Please try again later."
         )
     
-    # Update last request time
-    bot_auth_manager.update_last_request(bot.bot_id)
+    # Update last seen timestamp
+    bot.metadata = bot.metadata or {}
+    bot.metadata["last_request_time"] = datetime.utcnow().isoformat()
+    db.commit()
     
     return bot
+
+
+def require_bot_ownership(game_id: str, bot: Bot, db: Session) -> None:
+    """
+    Verify that a bot owns or is participating in a game.
+    
+    Raises HTTPException if bot doesn't have access to the game.
+    """
+    from .database import Game, Player
+    
+    # Check if bot is a player in this game
+    player = db.query(Player).join(Game).filter(
+        Game.id == game_id,
+        Player.bot_id == bot.id
+    ).first()
+    
+    if not player:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this game"
+        )

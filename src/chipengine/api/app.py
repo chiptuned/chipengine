@@ -4,26 +4,41 @@ FastAPI application for ChipEngine.
 Main application entry point with all routes and middleware.
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import uvicorn
 import uuid
+from sqlalchemy.orm import Session
 
 from .routes.games import router as games_router
 from .routes.stress_tests import router as stress_tests_router
 from .routes.bots import router as bots_router
+from .routes.bot_games import router as bot_games_router
 from .routes.stats import router as stats_router
 from .routes.tournaments import router as tournaments_router
 from .models import HealthResponse
+from .database import get_db, Bot, Game
 from .. import __version__
 from ..database import init_db
 from .websockets import manager, handle_client_message
 
 # Create FastAPI app
 app = FastAPI(
-    title="ChipEngine API",
-    description="Fast, lean chip engine for bot competitions",
+    title="ChipEngine Bot API",
+    description="""
+    Fast, lean chip engine for bot competitions
+    
+    ## Authentication
+    Most endpoints require API key authentication using Bearer tokens.
+    
+    ## Rate Limits
+    - General API: 1000 requests/minute per bot
+    - Game creation: 10 games/minute per bot
+    
+    ## Supported Games
+    - **RPS**: Rock Paper Scissors
+    """,
     version=__version__,
     docs_url="/docs",
     redoc_url="/redoc"
@@ -39,71 +54,84 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(games_router)
-app.include_router(stress_tests_router)
-app.include_router(bots_router)
-app.include_router(stats_router)
-app.include_router(tournaments_router)
+app.include_router(games_router)  # Human-playable games
+app.include_router(bots_router)   # Bot registration
+app.include_router(bot_games_router)  # Bot game API
+app.include_router(stress_tests_router)  # Stress testing
+app.include_router(stats_router)  # Statistics
+app.include_router(tournaments_router)  # Tournaments
 
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize database on startup."""
     init_db()
-    print(f"ChipEngine API v{__version__} started")
-    print("Database initialized")
 
 
 @app.get("/", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint."""
+async def health_check(db: Session = Depends(get_db)):
+    """Health check endpoint with statistics."""
+    bots_count = db.query(Bot).filter(Bot.is_active == True).count()
+    active_games = db.query(Game).filter(Game.status == "active").count()
+    
     return HealthResponse(
         status="healthy",
         version=__version__,
-        timestamp=datetime.utcnow().isoformat()
+        timestamp=datetime.utcnow().isoformat(),
+        bots_count=bots_count,
+        active_games=active_games
     )
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health():
-    """Health check endpoint."""
+async def health(db: Session = Depends(get_db)):
+    """Health check endpoint with statistics."""
+    bots_count = db.query(Bot).filter(Bot.is_active == True).count()
+    active_games = db.query(Game).filter(Game.status == "active").count()
+    
     return HealthResponse(
         status="healthy",
         version=__version__,
-        timestamp=datetime.utcnow().isoformat()
+        timestamp=datetime.utcnow().isoformat(),
+        bots_count=bots_count,
+        active_games=active_games
     )
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """
-    WebSocket endpoint for real-time game updates.
-    
-    Clients can:
-    - Connect to receive real-time updates
-    - Subscribe to specific games
-    - Receive move notifications
-    - Receive game state changes
-    """
+    """WebSocket endpoint for real-time game updates."""
     client_id = str(uuid.uuid4())
     await manager.connect(websocket, client_id)
     
     try:
+        await websocket.send_json({
+            "type": "connected",
+            "client_id": client_id,
+            "message": "Connected to ChipEngine WebSocket"
+        })
+        
         while True:
-            # Wait for messages from client
             data = await websocket.receive_json()
-            await handle_client_message(websocket, client_id, data)
+            await handle_client_message(client_id, data)
+            
     except WebSocketDisconnect:
-        await manager.disconnect(client_id)
+        manager.disconnect(client_id)
     except Exception as e:
-        print(f"WebSocket error for client {client_id}: {e}")
-        await manager.disconnect(client_id)
+        print(f"WebSocket error: {e}")
+        manager.disconnect(client_id)
 
 
 @app.get("/ws/stats")
 async def websocket_stats():
     """Get WebSocket connection statistics."""
-    return await manager.get_connection_stats()
+    return {
+        "total_connections": len(manager.active_connections),
+        "game_subscriptions": {
+            game_id: len(clients) 
+            for game_id, clients in manager.game_subscriptions.items()
+        }
+    }
 
 
 if __name__ == "__main__":

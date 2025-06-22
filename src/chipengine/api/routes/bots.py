@@ -7,234 +7,194 @@ Provides REST endpoints for bot registration and game management.
 from typing import Dict, List, Optional
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, status
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+import uuid
 
 from ..models import (
     RegisterBotRequest, RegisterBotResponse,
     BotInfoResponse, BotCreateGameRequest, BotCreateGameResponse,
     BotMakeMoveRequest, MakeMoveResponse, GameStateResponse,
-    BotGameListResponse
+    BotGameListResponse, BotStatistics
 )
-from ..auth import bot_auth_manager, verify_api_key, BotInfo
+from ..auth import get_current_bot, generate_api_key
+from ..database import get_db, Bot, Game, Player, Move
 from ..game_manager import game_manager
+from ...core.history import GameHistoryRecorder
 
 router = APIRouter(prefix="/api/bots", tags=["bots"])
 
 
-# Bot-specific game tracking
-bot_games: Dict[str, List[str]] = {}  # bot_id -> list of game_ids
-
-
 @router.post("/register", response_model=RegisterBotResponse)
-async def register_bot(request: RegisterBotRequest):
-    """
-    Register a new bot and receive an API key.
-    
-    The API key must be included in all subsequent requests as the X-API-Key header.
-    """
-    try:
-        bot_info = bot_auth_manager.register_bot(request.name)
-        
-        # Initialize bot's game list
-        bot_games[bot_info.bot_id] = []
-        
-        return RegisterBotResponse(
-            bot_id=bot_info.bot_id,
-            name=bot_info.name,
-            api_key=bot_info.api_key,
-            created_at=bot_info.created_at.isoformat()
-        )
-    except Exception as e:
+async def register_bot(
+    request: RegisterBotRequest,
+    db: Session = Depends(get_db)
+):
+    """Register a new bot and receive an API key."""
+    # Check if bot name already exists
+    existing_bot = db.query(Bot).filter(Bot.name == request.name).first()
+    if existing_bot:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to register bot: {str(e)}"
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bot name already exists"
         )
+    
+    # Create new bot
+    bot_id = str(uuid.uuid4())
+    api_key = generate_api_key()
+    
+    bot = Bot(
+        id=bot_id,
+        name=request.name,
+        api_key=api_key,
+        is_active=True,
+        metadata={}
+    )
+    
+    try:
+        db.add(bot)
+        db.commit()
+        db.refresh(bot)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bot registration failed"
+        )
+    
+    return RegisterBotResponse(
+        bot_id=bot.id,
+        name=bot.name,
+        api_key=bot.api_key,
+        created_at=bot.created_at.isoformat()
+    )
 
 
 @router.get("/{bot_id}", response_model=BotInfoResponse)
 async def get_bot_info(
     bot_id: str,
-    bot: BotInfo = Depends(verify_api_key)
+    current_bot: Bot = Depends(get_current_bot),
+    db: Session = Depends(get_db)
 ):
-    """
-    Get information about a bot.
-    
-    Bots can only retrieve their own information.
-    """
-    # Verify bot is requesting its own info
-    if bot.bot_id != bot_id:
+    """Get information about a bot (can only access your own info)."""
+    if current_bot.id != bot_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot access other bot's information"
+            detail="You can only access your own bot information"
         )
     
+    # Count games created by this bot
+    games_created = db.query(Game).join(Player).filter(
+        Player.bot_id == bot_id
+    ).count()
+    
+    last_request_time = None
+    if current_bot.metadata and "last_request_time" in current_bot.metadata:
+        last_request_time = current_bot.metadata["last_request_time"]
+    
     return BotInfoResponse(
-        bot_id=bot.bot_id,
-        name=bot.name,
-        created_at=bot.created_at.isoformat(),
-        games_created=bot.games_created,
-        last_request_time=bot.last_request_time.isoformat() if bot.last_request_time else None,
-        rate_limit=bot.rate_limit
+        bot_id=current_bot.id,
+        name=current_bot.name,
+        created_at=current_bot.created_at.isoformat(),
+        games_created=games_created,
+        last_request_time=last_request_time,
+        rate_limit=100  # requests per minute
     )
 
 
 @router.post("/games", response_model=BotCreateGameResponse)
-async def create_bot_game(
+async def create_game(
     request: BotCreateGameRequest,
-    bot: BotInfo = Depends(verify_api_key)
+    current_bot: Bot = Depends(get_current_bot),
+    db: Session = Depends(get_db)
 ):
-    """
-    Create a new game as a bot.
+    """Create a new game as a bot."""
+    # Generate bot IDs as players
+    players = [current_bot.id]
     
-    If opponent_bot_id is provided, the game will be created with that bot as the opponent.
-    Otherwise, the game will be created with a placeholder for a human or another bot to join.
-    """
+    if request.opponent_bot_id:
+        # Verify opponent bot exists
+        opponent = db.query(Bot).filter(Bot.id == request.opponent_bot_id).first()
+        if not opponent:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Opponent bot not found"
+            )
+        players.append(request.opponent_bot_id)
+    else:
+        # Add a random bot opponent
+        players.append("bot_random")
+    
+    # Create game through game manager
     try:
-        # Determine players
-        players = [bot.bot_id]
-        
-        if request.opponent_bot_id:
-            # Verify opponent bot exists
-            opponent = bot_auth_manager.get_bot_by_id(request.opponent_bot_id)
-            if not opponent:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Opponent bot not found"
-                )
-            players.append(request.opponent_bot_id)
-        else:
-            # Add placeholder for second player
-            players.append("waiting_for_opponent")
-        
-        # Create the game
-        game_id = game_manager.create_game(
+        game_state = game_manager.create_game(
             game_type=request.game_type,
             players=players,
             config=request.config
         )
-        
-        # Track game for bot
-        if bot.bot_id not in bot_games:
-            bot_games[bot.bot_id] = []
-        bot_games[bot.bot_id].append(game_id)
-        
-        # Track game for opponent bot if specified
-        if request.opponent_bot_id and request.opponent_bot_id in bot_games:
-            bot_games[request.opponent_bot_id].append(game_id)
-        
-        # Update bot's games created counter
-        bot_auth_manager.increment_games_created(bot.bot_id)
-        
-        return BotCreateGameResponse(
-            game_id=game_id,
-            game_type=request.game_type,
-            players=players,
-            status="created",
-            your_player_id=bot.bot_id
-        )
-        
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+    
+    return BotCreateGameResponse(
+        game_id=game_state.game_id,
+        game_type=game_state.game_type,
+        players=game_state.players,
+        status=game_state.status,
+        your_player_id=current_bot.id
+    )
 
 
 @router.get("/games/{game_id}", response_model=GameStateResponse)
-async def get_bot_game_state(
+async def get_game_state(
     game_id: str,
-    bot: BotInfo = Depends(verify_api_key)
+    current_bot: Bot = Depends(get_current_bot),
+    db: Session = Depends(get_db)
 ):
-    """
-    Get the current state of a game.
+    """Get current state of a game."""
+    # Verify bot has access to this game
+    from ..auth import require_bot_ownership
+    require_bot_ownership(game_id, current_bot, db)
     
-    Bots can only access games they are participating in.
-    """
-    try:
-        # Verify bot is in the game
-        game = game_manager.get_game(game_id)
-        if not game:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Game not found"
-            )
-        
-        if bot.bot_id not in game.players:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not a participant in this game"
-            )
-        
-        state_data = game_manager.get_game_state(game_id)
-        
-        return GameStateResponse(
-            game_id=state_data["game_id"],
-            players=state_data["players"],
-            current_player=state_data["current_player"],
-            game_over=state_data["game_over"],
-            winner=state_data["winner"],
-            valid_moves=state_data["valid_moves_per_player"],
-            metadata=state_data["metadata"]
-        )
-        
-    except ValueError as e:
+    # Get game state
+    game_state = game_manager.get_game_state(game_id)
+    if not game_state:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail="Game not found"
         )
+    
+    return game_state
 
 
 @router.post("/games/{game_id}/move", response_model=MakeMoveResponse)
-async def make_bot_move(
+async def make_move(
     game_id: str,
     request: BotMakeMoveRequest,
-    bot: BotInfo = Depends(verify_api_key)
+    current_bot: Bot = Depends(get_current_bot),
+    db: Session = Depends(get_db)
 ):
-    """
-    Make a move in a game.
+    """Make a move in a game."""
+    # Verify bot has access to this game
+    from ..auth import require_bot_ownership
+    require_bot_ownership(game_id, current_bot, db)
     
-    Bots can only make moves for themselves in games they are participating in.
-    """
+    # Make the move
     try:
-        # Verify bot is in the game
-        game = game_manager.get_game(game_id)
-        if not game:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Game not found"
-            )
-        
-        if bot.bot_id not in game.players:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not a participant in this game"
-            )
-        
-        # Make the move
-        game = game_manager.make_move(
+        move = {"action": request.action, **request.data}
+        result = game_manager.make_move(
             game_id=game_id,
-            player=bot.bot_id,
-            action=request.action,
-            data=request.data
-        )
-        
-        # Get updated game state
-        state_data = game_manager.get_game_state(game_id)
-        game_state = GameStateResponse(
-            game_id=state_data["game_id"],
-            players=state_data["players"],
-            current_player=state_data["current_player"],
-            game_over=state_data["game_over"],
-            winner=state_data["winner"],
-            valid_moves=state_data["valid_moves_per_player"],
-            metadata=state_data["metadata"]
+            player_id=current_bot.id,
+            move=move
         )
         
         return MakeMoveResponse(
-            success=True,
-            message="Move applied successfully",
-            game_state=game_state
+            success=result["success"],
+            message=result.get("message", ""),
+            game_state=result["game_state"]
         )
-        
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -243,113 +203,90 @@ async def make_bot_move(
 
 
 @router.get("/games", response_model=BotGameListResponse)
-async def list_bot_games(
-    bot: BotInfo = Depends(verify_api_key),
-    status_filter: Optional[str] = None  # "active", "completed", or None for all
+async def list_games(
+    status: Optional[str] = None,
+    limit: int = 20,
+    current_bot: Bot = Depends(get_current_bot),
+    db: Session = Depends(get_db)
 ):
-    """
-    List all games for the authenticated bot.
+    """List games for the authenticated bot."""
+    # Query games where bot is a player
+    query = db.query(Game).join(Player).filter(Player.bot_id == current_bot.id)
     
-    Optionally filter by game status (active or completed).
-    """
-    bot_game_ids = bot_games.get(bot.bot_id, [])
+    if status:
+        query = query.filter(Game.status == status)
     
-    games_list = []
-    active_count = 0
-    completed_count = 0
+    games = query.order_by(Game.created_at.desc()).limit(limit).all()
     
-    for game_id in bot_game_ids:
-        game = game_manager.get_game(game_id)
-        if game:
-            is_completed = game.is_game_over()
-            
-            # Apply status filter if provided
-            if status_filter == "active" and is_completed:
-                continue
-            elif status_filter == "completed" and not is_completed:
-                continue
-            
-            # Count games by status
-            if is_completed:
-                completed_count += 1
-            else:
-                active_count += 1
-            
-            # Get game info
-            state = game.get_state()
-            game_info = {
-                "game_id": game_id,
-                "game_type": type(game).__name__.replace("Game", "").lower(),
-                "players": state.players,
-                "current_player": state.current_player,
-                "game_over": is_completed,
-                "winner": game.get_winner() if is_completed else None,
-                "created_at": state.metadata.get("created_at", "unknown")
-            }
-            games_list.append(game_info)
+    # Convert to response format
+    game_list = []
+    for game in games:
+        game_list.append({
+            "game_id": game.id,
+            "game_type": game.game_type,
+            "status": game.status,
+            "created_at": game.created_at.isoformat(),
+            "completed_at": game.completed_at.isoformat() if game.completed_at else None,
+            "winner_id": game.winner_id
+        })
     
-    # Sort by creation time (most recent first)
-    games_list.sort(key=lambda x: x["created_at"], reverse=True)
+    # Count games by status
+    total_games = db.query(Game).join(Player).filter(Player.bot_id == current_bot.id).count()
+    active_games = db.query(Game).join(Player).filter(
+        Player.bot_id == current_bot.id,
+        Game.status == "active"
+    ).count()
+    completed_games = total_games - active_games
     
     return BotGameListResponse(
-        games=games_list,
-        total_games=len(games_list),
-        active_games=active_count,
-        completed_games=completed_count
+        games=game_list,
+        total_games=total_games,
+        active_games=active_games,
+        completed_games=completed_games
     )
 
 
-@router.get("/stats")
-async def get_bot_stats(bot: BotInfo = Depends(verify_api_key)):
-    """
-    Get statistics for the authenticated bot.
+@router.get("/stats", response_model=BotStatistics)
+async def get_bot_stats(
+    current_bot: Bot = Depends(get_current_bot),
+    db: Session = Depends(get_db)
+):
+    """Get detailed statistics for the authenticated bot."""
+    # Get all games where bot participated
+    games = db.query(Game).join(Player).filter(Player.bot_id == current_bot.id).all()
     
-    Returns various metrics about the bot's activity and performance.
-    """
-    bot_game_ids = bot_games.get(bot.bot_id, [])
+    total_games = len(games)
+    wins = sum(1 for g in games if g.winner_id == current_bot.id)
+    losses = sum(1 for g in games if g.status == "completed" and g.winner_id != current_bot.id)
+    draws = sum(1 for g in games if g.status == "completed" and g.winner_id is None)
     
-    # Calculate statistics
-    total_games = len(bot_game_ids)
-    wins = 0
-    losses = 0
-    active_games = 0
+    # Calculate win rate
+    completed_games = wins + losses + draws
+    win_rate = (wins / completed_games * 100) if completed_games > 0 else 0.0
     
-    game_types = {}
+    # Count by game type
+    games_by_type = {}
+    for game in games:
+        games_by_type[game.game_type] = games_by_type.get(game.game_type, 0) + 1
     
-    for game_id in bot_game_ids:
-        game = game_manager.get_game(game_id)
-        if game:
-            game_type = type(game).__name__.replace("Game", "").lower()
-            game_types[game_type] = game_types.get(game_type, 0) + 1
-            
-            if game.is_game_over():
-                winner = game.get_winner()
-                if winner == bot.bot_id:
-                    wins += 1
-                elif winner is not None:  # Not a draw
-                    losses += 1
-            else:
-                active_games += 1
+    # Get recent games
+    recent_games = []
+    for game in sorted(games, key=lambda g: g.created_at, reverse=True)[:5]:
+        recent_games.append({
+            "game_id": game.id,
+            "game_type": game.game_type,
+            "status": game.status,
+            "result": "win" if game.winner_id == current_bot.id else "loss" if game.winner_id else "draw",
+            "completed_at": game.completed_at.isoformat() if game.completed_at else None
+        })
     
-    # Calculate rate limit usage
-    requests_in_window = bot_auth_manager.rate_limiter.get_requests_count(bot.bot_id)
-    
-    return {
-        "bot_id": bot.bot_id,
-        "name": bot.name,
-        "created_at": bot.created_at.isoformat(),
-        "total_games": total_games,
-        "active_games": active_games,
-        "completed_games": total_games - active_games,
-        "wins": wins,
-        "losses": losses,
-        "draws": total_games - active_games - wins - losses,
-        "win_rate": wins / (wins + losses) if (wins + losses) > 0 else 0,
-        "game_types_played": game_types,
-        "rate_limit_usage": {
-            "current_requests": requests_in_window,
-            "max_requests": bot.rate_limit,
-            "window_seconds": 60
-        },
-        "last_request_time": bot.last_request_time.isoformat() if bot.last_request_time else None
-    }
+    return BotStatistics(
+        bot_id=current_bot.id,
+        total_games=total_games,
+        wins=wins,
+        losses=losses,
+        draws=draws,
+        win_rate=win_rate,
+        games_by_type=games_by_type,
+        recent_games=recent_games
+    )
